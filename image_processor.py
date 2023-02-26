@@ -5,6 +5,7 @@ import shutil
 import zipfile
 
 import geopandas
+import numpy as np
 from osgeo import gdal
 import rasterio as rio
 from rasterio.merge import merge
@@ -80,6 +81,23 @@ def mosaic_imagery(band):
         _.write(mosaic)
 
 
+def generate_ndvi(red, nir):
+    """
+
+    """
+    band_4 = rio.open('./sentinel_imagery/{}/clipped.tiff'.format(red))
+    band_8 = rio.open('./sentinel_imagery/{}/clipped.tiff'.format(nir))
+    band_red = band_4.read()
+    band_nir = band_8.read()
+    np.seterr(divide='ignore', invalid='ignore')
+    ndvi = (band_nir.astype(float) - band_red.astype(float)) / (band_nir + band_red)
+    meta = band_4.meta
+    meta.update(driver='GTiff')
+    meta.update(dtype=rio.float32)
+    with rio.open('./sentinel_imagery/NDVI_{}_{}.tiff'.format(red, nir), 'w', **meta) as _:
+        _.write(ndvi.astype(rio.float32))
+
+
 if __name__ == '__main__':
     download_sentinel_imagery()
 
@@ -96,3 +114,8 @@ if __name__ == '__main__':
                   cutlineDSName=Path('shp/Visakhapatnam.shp'),
                   cropToCutline=True,
                   dstNodata=0)
+
+    logging.info('Generating NDVI')
+    # TODO Create directory
+    generate_ndvi('B04_10m', 'B08_10m')
+    generate_ndvi('B04_20m', 'B8A_20m')

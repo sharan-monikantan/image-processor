@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import zipfile
 
 import geopandas
 from sentinelsat import geojson_to_wkt, read_geojson, SentinelAPI
@@ -35,5 +36,16 @@ def download_sentinel_imagery():
     api.download_all(list(products.keys()), './sentinel_imagery')
 
 
+def extract_imagery():
+    zipped_files = Path('./sentinel_imagery').glob('*.zip')
+    for _ in zipped_files:
+        logging.info('Extracting file: ' + str(_))
+        with zipfile.ZipFile(_, 'r') as zipped_file:
+            zipped_file.extractall('./sentinel_imagery')
+
+
 if __name__ == '__main__':
     download_sentinel_imagery()
+
+    # Pre-process imagery
+    extract_imagery()

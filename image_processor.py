@@ -5,6 +5,7 @@ import shutil
 import zipfile
 
 import geopandas
+from osgeo import gdal
 import rasterio as rio
 from rasterio.merge import merge
 from sentinelsat import geojson_to_wkt, read_geojson, SentinelAPI
@@ -89,3 +90,9 @@ if __name__ == '__main__':
     for band in ['B04_10m', 'B08_10m', 'B04_20m', 'B8A_20m']:
         logging.info('Mosaic-ing band ' + band)
         mosaic_imagery(band)
+        logging.info('Clipping band {} to area of interest'.format(band))
+        gdal.Warp('./sentinel_imagery/{}/clipped.tiff'.format(band),
+                  './sentinel_imagery/{}/mosaic.tiff'.format(band),
+                  cutlineDSName=Path('shp/Visakhapatnam.shp'),
+                  cropToCutline=True,
+                  dstNodata=0)

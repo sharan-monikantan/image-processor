@@ -7,6 +7,11 @@ processes the imagery and generates NDVI images for the AOI.
 The AOI used is the district of Visakhapatnam, Andra Pradesh. Shapefile for the AOI is obtained from
 https://github.com/HindustanTimesLabs/shapefiles. A simplified version of the shapefile, generated using ArcGIS Pro,
 is used to query Copernicus Open Access Hub, as the platform has a limit for the number of vertices the AOI shapefile can have.
+The following shapefiles are included in the repository
+1. Visakhapatnam.shp
+2. Visakhapatnam_Simplified_Polygon.shp
+
+and are located in `data/aoi/shp`
 
 ## Setting up
 

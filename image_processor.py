@@ -120,7 +120,7 @@ if __name__ == '__main__':
         logging.info('Clipping band {} to area of interest'.format(band))
         gdal.Warp(str(PATH_BANDS/band/'clipped.tiff'),
                   str(PATH_BANDS/band/'mosaic.tiff'),
-                  cutlineDSName=Path('shp/Visakhapatnam.shp'),
+                  cutlineDSName=Path('./data/aoi/shp/Visakhapatnam.shp'),
                   cropToCutline=True,
                   dstNodata=0)
 

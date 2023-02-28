@@ -18,11 +18,10 @@ logging.getLogger().setLevel(logging.INFO)
 
 AOI_SHAPEFILE = Path('./data/aoi/shp/Visakhapatnam_Simplified_Polygon.shp')
 AOI_GEOJSON = Path('./data/aoi/Visakhapatnam_Simplified_Polygon.geojson')
-COPERNICUS_USERNAME = ''
+COPERNICUS_USERNAME = os.environ.get('COPERNICUS_USERNAME', '')
 COPERNICUS_PASSWORD = os.environ.get('COPERNICUS_PASSWORD', '')
 PATH_SENTINEL_IMAGERY = Path('./data/sentinel')
 PATH_BANDS = Path('./data/bands')
-PATH_OUTPUT = Path('./output')
 
 
 def download_sentinel_imagery():
@@ -37,6 +36,8 @@ def download_sentinel_imagery():
     shp_file.to_file(AOI_GEOJSON, driver='GeoJSON')
 
     logging.info('Creating directory to store Sentinel imagery')
+    if PATH_SENTINEL_IMAGERY.exists():
+        shutil.rmtree(PATH_SENTINEL_IMAGERY)
     PATH_SENTINEL_IMAGERY.mkdir()
 
     api = SentinelAPI(COPERNICUS_USERNAME, COPERNICUS_PASSWORD)
@@ -49,7 +50,7 @@ def download_sentinel_imagery():
     api.download_all(list(products.keys()), str(PATH_SENTINEL_IMAGERY))
 
 
-def extract_imagery():
+def extract_imagery_from_zip():
     zipped_files = PATH_SENTINEL_IMAGERY.glob('*.zip')
     for _ in zipped_files:
         logging.info('Extracting zipfile: ' + str(_))
@@ -57,31 +58,31 @@ def extract_imagery():
             zipped_file.extractall(str(PATH_SENTINEL_IMAGERY))
 
 
-def collect_band_for_resolution(resolution, band):
+def collect_imagery_for_band(band):
     logging.info('Collecting band ' + band)
     Path(PATH_BANDS/band).mkdir(parents=True, exist_ok=True)
-    data = glob.glob(str(PATH_SENTINEL_IMAGERY)+'/**/'+resolution+'/*'+band+'.jp2', recursive=True)
+    data = glob.glob(str(PATH_SENTINEL_IMAGERY)+'/**/*'+band+'.jp2', recursive=True)
     for _ in data:
         shutil.copy(_, str(PATH_BANDS/band))
 
 
-def mosaic_imagery(band):
+def mosaic_imagery_for_aoi(band):
     """
     Reference: URL
     """
-    files_for_band = list((PATH_BANDS/band).iterdir())
-    files_to_mosaic = []
-    for _ in files_for_band:
-        raster = rio.open(_)
-        files_to_mosaic.append(raster)
+    imagery_for_band = list((PATH_BANDS/band).iterdir())
+    imagery_to_mosaic = []
+    for _ in imagery_for_band:
+        imagery = rio.open(_)
+        imagery_to_mosaic.append(imagery)
 
-    mosaic, output = merge(files_to_mosaic)
-    metadata = raster.meta.copy()
+    mosaic, transform = merge(imagery_to_mosaic)
+    metadata = imagery.meta.copy()
     metadata.update({
         "driver": "GTiff",
         "height": mosaic.shape[1],
         "width": mosaic.shape[2],
-        "transform": output
+        "transform": transform
     })
     with rio.open(str(PATH_BANDS/band/'mosaic.tiff'), 'w', **metadata) as _:
         _.write(mosaic)
@@ -91,6 +92,7 @@ def generate_ndvi(red_band, nir_band):
     """
 
     """
+    logging.info('Generating NDVI using {}, {}'.format(red_band, nir_band))
     band_4 = rio.open(str(PATH_BANDS/red_band/'clipped.tiff'))
     band_8 = rio.open(str(PATH_BANDS/nir_band/'clipped.tiff'))
     red = band_4.read()
@@ -103,20 +105,25 @@ def generate_ndvi(red_band, nir_band):
     metadata.update(driver='GTiff')
     metadata.update(dtype=rio.float32)
 
-    with rio.open(str(PATH_OUTPUT/'NDVI_{}_{}.tiff'.format(red_band, nir_band)), 'w', **metadata) as _:
+    with rio.open(str(Path('./output')/'NDVI_{}_{}.tiff'.format(red_band, nir_band)), 'w', **metadata) as _:
         _.write(ndvi.astype(rio.float32))
 
 
 if __name__ == '__main__':
     download_sentinel_imagery()
 
-    # Pre-process imagery
-    extract_imagery()
-    for resolution, band in [('R10m', 'B04_10m'), ('R10m', 'B08_10m'), ('R20m', 'B04_20m'), ('R20m', 'B8A_20m')]:
-        collect_band_for_resolution(resolution, band)
-    for band in ['B04_10m', 'B08_10m', 'B04_20m', 'B8A_20m']:
-        logging.info('Mosaic-ing band ' + band)
-        mosaic_imagery(band)
+    # Pre-processing imagery
+    extract_imagery_from_zip()
+    bands = ['B04_10m', 'B08_10m', 'B04_20m', 'B8A_20m']
+
+    if PATH_BANDS.exists():
+        shutil.rmtree(PATH_BANDS)
+    for band in bands:
+        collect_imagery_for_band(band)
+
+    for band in bands:
+        logging.info('Mosaicing imagery for band ' + band)
+        mosaic_imagery_for_aoi(band)
         logging.info('Clipping band {} to area of interest'.format(band))
         gdal.Warp(str(PATH_BANDS/band/'clipped.tiff'),
                   str(PATH_BANDS/band/'mosaic.tiff'),
@@ -124,6 +131,6 @@ if __name__ == '__main__':
                   cropToCutline=True,
                   dstNodata=0)
 
-    logging.info('Generating NDVI')
+    # Generating NDVI for 10m and 20m resolutions
     generate_ndvi('B04_10m', 'B08_10m')
     generate_ndvi('B04_20m', 'B8A_20m')

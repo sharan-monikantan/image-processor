@@ -22,15 +22,17 @@ COPERNICUS_USERNAME = os.environ.get('COPERNICUS_USERNAME', '')
 COPERNICUS_PASSWORD = os.environ.get('COPERNICUS_PASSWORD', '')
 PATH_SENTINEL_IMAGERY = Path('./data/sentinel')
 PATH_BANDS = Path('./data/bands')
+PATH_OUTPUT = Path('./output')
 
 
 def download_sentinel_imagery():
     """
-    Downloads the requested Sentinel imagery from Copernicus.
-    This function converts the given shapefile to GeoJSON and uses it as the area of interest.
-    A shapefile with simplified polygon shall be provided as the input.
+    Downloads the requested Sentinel imagery from Copernicus Open Access Hub.
+
+    :return: None
     """
 
+    # Shapefile is converted to GeoJSON as the API supports GeoJSON format.
     logging.info('Converting shapefile to GeoJSON')
     shp_file = geopandas.read_file(AOI_SHAPEFILE)
     shp_file.to_file(AOI_GEOJSON, driver='GeoJSON')
@@ -51,6 +53,11 @@ def download_sentinel_imagery():
 
 
 def extract_imagery_from_zip():
+    """
+    Extracts Sentinel imagery from the downloaded zip files
+
+    :return: None
+    """
     zipped_files = PATH_SENTINEL_IMAGERY.glob('*.zip')
     for _ in zipped_files:
         logging.info('Extracting zipfile: ' + str(_))
@@ -59,6 +66,13 @@ def extract_imagery_from_zip():
 
 
 def collect_imagery_for_band(band):
+    """
+    Collects all imagery of a specific band/resolution, e.g., B04_10m.
+    The collected imagery will be used for subsequent processing.
+
+    :param str band: The band to collect.
+    :return: None
+    """
     logging.info('Collecting band ' + band)
     Path(PATH_BANDS/band).mkdir(parents=True, exist_ok=True)
     data = glob.glob(str(PATH_SENTINEL_IMAGERY)+'/**/*'+band+'.jp2', recursive=True)
@@ -68,7 +82,10 @@ def collect_imagery_for_band(band):
 
 def mosaic_imagery_for_aoi(band):
     """
-    Reference: URL
+    Mosaics all imagery of a specific band.
+
+    :param str band: The band for which all imagery is to be mosaic-ed.
+    :return: None
     """
     imagery_for_band = list((PATH_BANDS/band).iterdir())
     imagery_to_mosaic = []
@@ -90,7 +107,11 @@ def mosaic_imagery_for_aoi(band):
 
 def generate_ndvi(red_band, nir_band):
     """
+    Creates NDVI imagery using the input Red and NIR bands.
 
+    :param str red_band: The Red band to use. e.g., B04_10m
+    :param str nir_band: The NIR band to use. e.g., B08_10m
+    :return: None
     """
     logging.info('Generating NDVI using {}, {}'.format(red_band, nir_band))
     band_4 = rio.open(str(PATH_BANDS/red_band/'clipped.tiff'))
@@ -105,7 +126,7 @@ def generate_ndvi(red_band, nir_band):
     metadata.update(driver='GTiff')
     metadata.update(dtype=rio.float32)
 
-    with rio.open(str(Path('./output')/'NDVI_{}_{}.tiff'.format(red_band, nir_band)), 'w', **metadata) as _:
+    with rio.open(str(PATH_OUTPUT/'NDVI_{}_{}.tiff'.format(red_band, nir_band)), 'w', **metadata) as _:
         _.write(ndvi.astype(rio.float32))
 
 
@@ -132,5 +153,8 @@ if __name__ == '__main__':
                   dstNodata=0)
 
     # Generating NDVI for 10m and 20m resolutions
+    if PATH_OUTPUT.exists():
+        shutil.rmtree(PATH_OUTPUT)
+    PATH_OUTPUT.mkdir()
     generate_ndvi('B04_10m', 'B08_10m')
     generate_ndvi('B04_20m', 'B8A_20m')

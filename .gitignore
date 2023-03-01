@@ -1,4 +1,4 @@
 .idea
 data/bands
 data/sentinel
-output/NDVI*.tiff*
+output
